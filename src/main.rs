@@ -14,7 +14,7 @@ const WEATHER_CHANNEL_ID: &str = "1526657004649844796";
 const WAIT_MINUTES: u64 = 5;
 const PID_FILE: &str = "discord-selfbot.pid";
 
-// ── CLI definicja ─────────────────────────────────────────────────────────────
+
 
 #[derive(Parser)]
 #[command(name = "discord-selfbot")]
@@ -26,7 +26,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Wyslij wiadomosc do kanalu (channel ID)
+
     Send {
         #[arg(short, long)]
         channel: String,
@@ -34,7 +34,6 @@ enum Commands {
         message: String,
     },
 
-    /// Wyslij DM do uzytkownika (user ID)
     Dm {
         #[arg(short, long)]
         user: String,
@@ -42,20 +41,15 @@ enum Commands {
         message: String,
     },
 
-    /// Sprawdz polaczenie - wyswietl dane zalogowanego konta
     Whoami,
 
-    /// Tryb licznika: czyta ostatnia wiadomosc z kanalu i wysyla liczbe+1 co 5 minut
     Counter,
 
-    /// Tryb pogody: wysyla pogode dla Nowego Dworu Gdanskiego co godzine (synchronizacja do XX:00)
     Weather,
 
-    /// Zatrzymaj dzialajacego bota (czyta PID z pliku discord-selfbot.pid)
     Stop,
 }
 
-// ── Open-Meteo API typy ───────────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
 struct OpenMeteoResponse {
@@ -77,7 +71,6 @@ struct OpenMeteoHourly {
     precipitation_probability: Vec<Option<u32>>,
 }
 
-// ── Discord API typy ──────────────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
 struct DiscordUser {
@@ -113,8 +106,6 @@ struct DmChannel {
 struct CreateDmPayload {
     recipient_id: String,
 }
-
-// ── Klient Discord ────────────────────────────────────────────────────────────
 
 struct DiscordClient {
     http: reqwest::Client,
@@ -244,10 +235,8 @@ impl DiscordClient {
     }
 }
 
-// ── PID management ────────────────────────────────────────────────────────────
 
 fn pid_file_path() -> PathBuf {
-    // Plik PID obok binarki (lub w biezacym katalogu)
     PathBuf::from(PID_FILE)
 }
 
@@ -309,7 +298,6 @@ fn stop_bot() -> Result<()> {
     Ok(())
 }
 
-// ── Logika pogody ─────────────────────────────────────────────────────────────
 
 fn weather_code_to_description(code: u32) -> &'static str {
     match code {
@@ -404,15 +392,10 @@ fn build_weather_message(data: &OpenMeteoResponse) -> String {
     )
 }
 
-/// Oblicz ile sekund zostalo do nastepnej pelnej godziny + 10 minut bufor
-/// Jesli np. jest 8:11 -> czeka do 9:00 (49 min)
-/// Jesli jest 8:51 -> czeka do 9:00 (9 min)
-/// Zawsze synchronizuje sie do XX:00
 fn seconds_until_next_hour() -> u64 {
     let now = Local::now();
     let minutes = now.minute() as u64;
     let seconds = now.second() as u64;
-    // Ile sekund zostalo do nastepnej pelnej godziny
     let remaining = (60 - minutes) * 60 - seconds;
     remaining
 }
@@ -420,7 +403,6 @@ fn seconds_until_next_hour() -> u64 {
 async fn run_weather(client: &DiscordClient) -> Result<()> {
     write_pid();
 
-    // Obsługa Ctrl+C - usuń plik PID przed wyjściem
     let pid_cleanup = tokio::spawn(async {
         tokio::signal::ctrl_c().await.ok();
         remove_pid_file();
@@ -433,7 +415,6 @@ async fn run_weather(client: &DiscordClient) -> Result<()> {
         WEATHER_CHANNEL_ID
     );
 
-    // Pierwsza wyslka: poczekaj do nastepnej pelnej godziny
     let wait_secs = seconds_until_next_hour();
     let wait_mins = wait_secs / 60;
     let wait_sec_rest = wait_secs % 60;
@@ -468,7 +449,6 @@ async fn run_weather(client: &DiscordClient) -> Result<()> {
             }
         }
 
-        // Czekaj do nastepnej pelnej godziny
         let wait = seconds_until_next_hour();
         println!(
             "Nastepna wyslka za {}:{:02} (o {:02}:00)\n",
@@ -483,8 +463,6 @@ async fn run_weather(client: &DiscordClient) -> Result<()> {
     pid_cleanup.abort();
     Ok(())
 }
-
-// ── Logika licznika ───────────────────────────────────────────────────────────
 
 async fn run_counter(client: &DiscordClient, my_id: &str) -> Result<()> {
     write_pid();
@@ -565,15 +543,12 @@ async fn run_counter(client: &DiscordClient, my_id: &str) -> Result<()> {
     Ok(())
 }
 
-// ── Main ──────────────────────────────────────────────────────────────────────
-
 #[tokio::main]
 async fn main() -> Result<()> {
     let _ = dotenv();
 
     let cli = Cli::parse();
 
-    // Komenda stop nie potrzebuje tokenu
     if let Commands::Stop = cli.command {
         return stop_bot();
     }
