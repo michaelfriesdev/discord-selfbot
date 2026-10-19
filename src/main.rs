@@ -11,10 +11,10 @@ use tokio::time::{sleep, Duration};
 
 const COUNTER_CHANNEL_ID: &str = "1530191197178695700";
 const WEATHER_CHANNEL_ID: &str = "1526657004649844796";
+const LAST_LETTER_CHANNEL_ID: &str = "1548673440096067704";
 const WAIT_MINUTES: u64 = 5;
+const WEATHER_INTERVAL_HOURS: u64 = 3;
 const PID_FILE: &str = "discord-selfbot.pid";
-
-
 
 #[derive(Parser)]
 #[command(name = "discord-selfbot")]
@@ -26,30 +26,24 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-
     Send {
         #[arg(short, long)]
         channel: String,
         #[arg(short, long)]
         message: String,
     },
-
     Dm {
         #[arg(short, long)]
         user: String,
         #[arg(short, long)]
         message: String,
     },
-
     Whoami,
-
     Counter,
-
     Weather,
-
+    LastLetter,
     Stop,
 }
-
 
 #[derive(Debug, Deserialize)]
 struct OpenMeteoResponse {
@@ -70,7 +64,6 @@ struct OpenMeteoHourly {
     time: Vec<String>,
     precipitation_probability: Vec<Option<u32>>,
 }
-
 
 #[derive(Debug, Deserialize)]
 struct DiscordUser {
@@ -235,7 +228,6 @@ impl DiscordClient {
     }
 }
 
-
 fn pid_file_path() -> PathBuf {
     PathBuf::from(PID_FILE)
 }
@@ -297,7 +289,6 @@ fn stop_bot() -> Result<()> {
 
     Ok(())
 }
-
 
 fn weather_code_to_description(code: u32) -> &'static str {
     match code {
@@ -392,18 +383,35 @@ fn build_weather_message(data: &OpenMeteoResponse) -> String {
     )
 }
 
-fn seconds_until_next_hour() -> u64 {
+fn seconds_until_next_weather_slot() -> u64 {
     let now = Local::now();
-    let minutes = now.minute() as u64;
-    let seconds = now.second() as u64;
-    let remaining = (60 - minutes) * 60 - seconds;
-    remaining
+    let hour = now.hour() as u64;
+    let minute = now.minute() as u64;
+    let second = now.second() as u64;
+
+    let hours_since_last_slot = hour % WEATHER_INTERVAL_HOURS;
+    let hours_to_next = WEATHER_INTERVAL_HOURS - hours_since_last_slot;
+    let secs_to_next_full_hour = (60 - minute) * 60 - second;
+
+    if hours_since_last_slot == 0 && minute == 0 && second == 0 {
+        return WEATHER_INTERVAL_HOURS * 3600;
+    }
+
+    secs_to_next_full_hour + (hours_to_next - 1) * 3600
+}
+
+fn next_weather_slot_str() -> String {
+    let now = Local::now();
+    let hour = now.hour() as u64;
+    let hours_since_last = hour % WEATHER_INTERVAL_HOURS;
+    let next_hour = (hour + WEATHER_INTERVAL_HOURS - hours_since_last) % 24;
+    format!("{:02}:00", next_hour)
 }
 
 async fn run_weather(client: &DiscordClient) -> Result<()> {
     write_pid();
 
-    let pid_cleanup = tokio::spawn(async {
+    tokio::spawn(async {
         tokio::signal::ctrl_c().await.ok();
         remove_pid_file();
         println!("\nZatrzymano. PID usuniety.");
@@ -411,20 +419,18 @@ async fn run_weather(client: &DiscordClient) -> Result<()> {
     });
 
     println!(
-        "Uruchamiam tryb pogody na kanale {}",
-        WEATHER_CHANNEL_ID
+        "Uruchamiam tryb pogody na kanale {} (co {} godziny, sloty: 0:00/3:00/6:00/9:00...)",
+        WEATHER_CHANNEL_ID, WEATHER_INTERVAL_HOURS
     );
 
-    let wait_secs = seconds_until_next_hour();
-    let wait_mins = wait_secs / 60;
-    let wait_sec_rest = wait_secs % 60;
+    let wait_secs = seconds_until_next_weather_slot();
     println!(
-        "Nastepna wyslka za {}:{:02} (o {:02}:00)",
-        wait_mins,
-        wait_sec_rest,
-        (Local::now().hour() + 1) % 24
+        "Nastepna wyslka za {}h {}min (o {})",
+        wait_secs / 3600,
+        (wait_secs % 3600) / 60,
+        next_weather_slot_str()
     );
-    println!("Aby zatrzymac: Ctrl+C lub 'discord-selfbot.exe stop'\n");
+    println!("Aby zatrzymac: Ctrl+C lub './discord-selfbot stop'\n");
 
     sleep(Duration::from_secs(wait_secs)).await;
 
@@ -449,25 +455,145 @@ async fn run_weather(client: &DiscordClient) -> Result<()> {
             }
         }
 
-        let wait = seconds_until_next_hour();
+        let wait = seconds_until_next_weather_slot();
         println!(
-            "Nastepna wyslka za {}:{:02} (o {:02}:00)\n",
-            wait / 60,
-            wait % 60,
-            (Local::now().hour() + 1) % 24
+            "Nastepna wyslka za {}h {}min (o {})\n",
+            wait / 3600,
+            (wait % 3600) / 60,
+            next_weather_slot_str()
         );
         sleep(Duration::from_secs(wait)).await;
     }
+}
 
-    #[allow(unreachable_code)]
-    pid_cleanup.abort();
-    Ok(())
+fn word_for_letter(letter: char) -> Option<&'static str> {
+    match letter {
+        'a' => Some("Ananas"),
+        'ą' => Some("Ąkacja"),
+        'b' => Some("Banan"),
+        'c' => Some("Cebula"),
+        'ć' => Some("Ćma"),
+        'd' => Some("Delfin"),
+        'e' => Some("Elefant"),
+        'ę' => Some("Ęgorz"),
+        'f' => Some("Flamingo"),
+        'g' => Some("Goryl"),
+        'h' => Some("Hipopotam"),
+        'i' => Some("Iguana"),
+        'j' => Some("Jaguar"),
+        'k' => Some("Kaktus"),
+        'l' => Some("Lama"),
+        'ł' => Some("Łoś"),
+        'm' => Some("Małpa"),
+        'n' => Some("Nosorożec"),
+        'ń' => Some("Ńku"),
+        'o' => Some("Orangutan"),
+        'ó' => Some("Ósemka"),
+        'p' => Some("Papuga"),
+        'r' => Some("Ryba"),
+        's' => Some("Słoń"),
+        'ś' => Some("Świnia"),
+        't' => Some("Tygrys"),
+        'u' => Some("Ufo"),
+        'w' => Some("Wąż"),
+        'x' => Some("Xylofonista"),
+        'y' => Some("Yak"),
+        'z' => Some("Zebra"),
+        'ź' => Some("Źrebak"),
+        'ż' => Some("Żyrafa"),
+        _ => None,
+    }
+}
+
+fn last_letter(text: &str) -> Option<char> {
+    let last_word = text.split_whitespace().last()?;
+    last_word
+        .chars()
+        .rev()
+        .find(|c| c.is_alphabetic())
+        .map(|c| c.to_lowercase().next().unwrap_or(c))
+}
+
+async fn run_last_letter(client: &DiscordClient, my_id: &str) -> Result<()> {
+    write_pid();
+
+    tokio::spawn(async {
+        tokio::signal::ctrl_c().await.ok();
+        remove_pid_file();
+        println!("\nZatrzymano. PID usuniety.");
+        std::process::exit(0);
+    });
+
+    println!(
+        "Uruchamiam tryb ostatniej litery na kanale {} (co {} min)",
+        LAST_LETTER_CHANNEL_ID, WAIT_MINUTES
+    );
+    println!("Aby zatrzymac: Ctrl+C lub './discord-selfbot stop'\n");
+
+    loop {
+        println!("--- Sprawdzam ostatnia wiadomosc ({})", Local::now().format("%H:%M:%S"));
+
+        match client.get_last_message(LAST_LETTER_CHANNEL_ID).await {
+            Err(e) => {
+                eprintln!("Blad pobierania wiadomosci: {}", e);
+                sleep(Duration::from_secs(WAIT_MINUTES * 60)).await;
+                continue;
+            }
+            Ok(last_msg) => {
+                if last_msg.author.id == my_id {
+                    println!(
+                        "Ostatnia wiadomosc nalezy do nas (\"{}\") - czekam {} min",
+                        last_msg.content.trim(),
+                        WAIT_MINUTES
+                    );
+                    sleep(Duration::from_secs(WAIT_MINUTES * 60)).await;
+                    continue;
+                }
+
+                let content = last_msg.content.trim();
+                println!("Ostatnia wiadomosc: \"{}\"", content);
+
+                match last_letter(content) {
+                    None => {
+                        println!("Nie znaleziono litery w wiadomosci - czekam {} min", WAIT_MINUTES);
+                        sleep(Duration::from_secs(WAIT_MINUTES * 60)).await;
+                        continue;
+                    }
+                    Some(letter) => {
+                        println!("Ostatnia litera: '{}'", letter);
+
+                        match word_for_letter(letter) {
+                            None => {
+                                println!(
+                                    "Brak slowa dla litery '{}' - czekam {} min",
+                                    letter, WAIT_MINUTES
+                                );
+                                sleep(Duration::from_secs(WAIT_MINUTES * 60)).await;
+                                continue;
+                            }
+                            Some(word) => {
+                                println!("Wysylam: \"{}\"", word);
+
+                                match client.send_message(LAST_LETTER_CHANNEL_ID, word).await {
+                                    Ok(sent) => println!("Wyslano (ID: {})", sent.id),
+                                    Err(e) => eprintln!("Blad wysylania: {}", e),
+                                }
+                            }
+                        }
+                    }
+                }
+
+                println!("Czekam {} min...\n", WAIT_MINUTES);
+                sleep(Duration::from_secs(WAIT_MINUTES * 60)).await;
+            }
+        }
+    }
 }
 
 async fn run_counter(client: &DiscordClient, my_id: &str) -> Result<()> {
     write_pid();
 
-    let pid_cleanup = tokio::spawn(async {
+    tokio::spawn(async {
         tokio::signal::ctrl_c().await.ok();
         remove_pid_file();
         println!("\nZatrzymano. PID usuniety.");
@@ -478,7 +604,7 @@ async fn run_counter(client: &DiscordClient, my_id: &str) -> Result<()> {
         "Uruchamiam tryb licznika na kanale {} (co {} min)",
         COUNTER_CHANNEL_ID, WAIT_MINUTES
     );
-    println!("Aby zatrzymac: Ctrl+C lub 'discord-selfbot.exe stop'\n");
+    println!("Aby zatrzymac: Ctrl+C lub './discord-selfbot stop'\n");
 
     loop {
         println!("--- Sprawdzam ostatnia wiadomosc ---");
@@ -518,16 +644,9 @@ async fn run_counter(client: &DiscordClient, my_id: &str) -> Result<()> {
                             number, last_msg.author.id, next
                         );
 
-                        match client
-                            .send_message(COUNTER_CHANNEL_ID, &next.to_string())
-                            .await
-                        {
-                            Ok(sent) => {
-                                println!("Wyslano {} (ID: {})", sent.content, sent.id);
-                            }
-                            Err(e) => {
-                                eprintln!("Blad wysylania: {}", e);
-                            }
+                        match client.send_message(COUNTER_CHANNEL_ID, &next.to_string()).await {
+                            Ok(sent) => println!("Wyslano {} (ID: {})", sent.content, sent.id),
+                            Err(e) => eprintln!("Blad wysylania: {}", e),
                         }
 
                         println!("Czekam {} minut...\n", WAIT_MINUTES);
@@ -537,10 +656,6 @@ async fn run_counter(client: &DiscordClient, my_id: &str) -> Result<()> {
             }
         }
     }
-
-    #[allow(unreachable_code)]
-    pid_cleanup.abort();
-    Ok(())
 }
 
 #[tokio::main]
@@ -559,9 +674,7 @@ async fn main() -> Result<()> {
     if token == "twoj_token_tutaj" || token.is_empty() {
         anyhow::bail!(
             "Token nie zostal ustawiony!\n\
-             Edytuj plik .env i wstaw swoj token Discord.\n\
-             Jak znalezc token: otworz Discord w przegladarce -> F12 -> \
-             Network -> wyszukaj 'science' lub 'library' -> Authorization header"
+             Edytuj plik .env i wstaw swoj token Discord."
         );
     }
 
@@ -594,10 +707,7 @@ async fn main() -> Result<()> {
         Commands::Counter => {
             println!("Pobieram dane konta...");
             let me = client.get_me().await?;
-            let display = me
-                .global_name
-                .clone()
-                .unwrap_or_else(|| me.username.clone());
+            let display = me.global_name.clone().unwrap_or_else(|| me.username.clone());
             println!("Zalogowano jako: {} (ID: {})", display, me.id);
             run_counter(&client, &me.id).await?;
         }
@@ -608,6 +718,14 @@ async fn main() -> Result<()> {
             let display = me.global_name.unwrap_or_else(|| me.username.clone());
             println!("Zalogowano jako: {}", display);
             run_weather(&client).await?;
+        }
+
+        Commands::LastLetter => {
+            println!("Pobieram dane konta...");
+            let me = client.get_me().await?;
+            let display = me.global_name.clone().unwrap_or_else(|| me.username.clone());
+            println!("Zalogowano jako: {} (ID: {})", display, me.id);
+            run_last_letter(&client, &me.id).await?;
         }
 
         Commands::Stop => unreachable!(),
