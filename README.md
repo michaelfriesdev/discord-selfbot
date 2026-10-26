@@ -1,73 +1,72 @@
 # discord-selfbot
 
-Discord self-bot napisany w Rust. Działa z konta użytkownika (nie bota) — wysyła wiadomości do kanałów i DM.
+A Discord self-bot written in Rust. It operates using a regular user account (not a bot account) and can send messages to channels and DMs.
 
-> ⚠️ **Uwaga:** Używanie self-botów narusza regulamin Discord (ToS). Używaj na własne ryzyko.
+> ⚠️ **Warning:** Using self-bots violates Discord's Terms of Service (ToS). Use at your own risk.
 
-## Wymagania
+## Requirements
 
 - [Rust](https://rustup.rs/) (1.75+)
-- Token użytkownika Discord
+- Discord user token
 
-## Jak znaleźć token Discord
+## How to Find Your Discord Token
 
-1. Otwórz Discord w przeglądarce (discord.com)
-2. Naciśnij `F12` → zakładka **Network**
-3. Wyszukaj dowolny request do `discord.com/api`
-4. W headerach znajdź `Authorization` — to jest twój token
+For security reasons, avoid extracting or sharing your personal Discord token. Use an official Discord bot account and its bot token for automated tasks instead.
 
-## Konfiguracja
+## Configuration
 
-Edytuj plik `.env`:
+Edit the `.env` file:
 
 ```env
-DISCORD_TOKEN=twoj_token_tutaj
+DISCORD_TOKEN=your_token_here
 ```
 
-Możesz też ustawić zmienną środowiskową bezpośrednio:
+You can also set the environment variable directly:
 
 ```bash
-export DISCORD_TOKEN="twoj_token"
+export DISCORD_TOKEN="your_token"
 ```
 
-## Budowanie
+## Building
 
 ```bash
 cargo build --release
 ```
 
-Binarka znajdzie się w `target/release/discord-selfbot`.
+The compiled binary will be located at `target/release/discord-selfbot`.
 
-## Użycie
+## Usage
 
-### Sprawdź połączenie
+### Check the Connection
 
 ```bash
 ./discord-selfbot whoami
 ```
 
-### Wyślij wiadomość do kanału
+### Send a Message to a Channel
 
 ```bash
-./discord-selfbot send --channel 123456789012345678 --message "Hej!"
+./discord-selfbot send --channel 123456789012345678 --message "Hello!"
 ```
 
-### Wyślij DM do użytkownika
+### Send a Direct Message
 
 ```bash
-./discord-selfbot dm --user 123456789012345678 --message "Hej!"
+./discord-selfbot dm --user 123456789012345678 --message "Hello!"
 ```
 
-> Jak znaleźć ID kanału/użytkownika: w Discord włącz **Tryb dewelopera** (Ustawienia → Zaawansowane → Tryb dewelopera), następnie kliknij prawym przyciskiem na kanał/użytkownika → **Kopiuj ID**.
+> To find a channel or user ID, enable **Developer Mode** in Discord (User Settings → Advanced → Developer Mode). Then right-click the channel or user and select **Copy ID**.
 
-## Skróty
+## Command Shortcuts
 
-```
+```text
 send  -c <channel_id>  -m <message>
 dm    -u <user_id>     -m <message>
 whoami
 ```
 
-## Na VPS (systemd)
+## Running on a VPS (systemd)
 
-Jeśli chcesz uruchamiać bota jako usługę, skopiuj binarke na serwer i ustaw `DISCORD_TOKEN` w środowisku lub pliku `.env` obok binarki.
+To run the application as a systemd service, copy the compiled binary to your server and configure the `DISCORD_TOKEN` environment variable or place a `.env` file next to the binary.
+
+**Security note:** Never commit your `.env` file or expose your Discord token publicly. For automated messaging, consider using an official Discord bot account and the Discord API.
